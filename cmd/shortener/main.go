@@ -3,53 +3,51 @@ package main
 import (
 	"crypto/sha256"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 )
 
-var urlHash = make(map[string]string)
-
-// Функция для хеширования URL
-func HashUrl(url string) string {
-	hash := sha256.New()
-	hash.Write([]byte(url))
-	return fmt.Sprintf("%x", hash.Sum(nil))
+func generateHashUrl(url string) string {
+	h := sha256.New()
+	h.Write([]byte(url))
+	hash := fmt.Sprintf("%x", h.Sum(nil))
+	return hash[:8]
 }
 
-// Проверка, существует ли хеш
-func isValidHash(hash string) bool {
-	_, ok := urlHash[hash]
-	return ok
-}
-
-// Генерация короткого URL
-func ShortUrl(url string) string {
-	hash := HashUrl(url)
-	if !isValidHash(hash) {
-		urlHash[hash] = url
-	}
-	return fmt.Sprintf("http://localhost:8080/%s", hash)
-}
-
-// Обработчик запросов
-func handleShorten(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+func shortUrl(res http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodPost {
+		http.Error(res, "Invalid request method", http.StatusBadRequest)
 		return
 	}
 
-	url := r.FormValue("url")
-	if url == "" {
-		http.Error(w, "URL is required", http.StatusBadRequest)
+	// Чтение данных из тела запроса
+	responseData, err := io.ReadAll(req.Body)
+	if err != nil {
+		http.Error(res, "Error reading request body", http.StatusInternalServerError)
 		return
 	}
 
-	shortened := ShortUrl(url)
-	fmt.Fprintf(w, "Shortened URL: %s\n", shortened)
+	// Преобразование тела запроса в строку, потому что получаем в байтах
+	responseString := string(responseData)
+
+	// Генерация хеша URL
+	urlHash := generateHashUrl(responseString)
+
+	// Возвращаем сокращенный URL
+	res.Header().Set("Content-Type", "text/plain")
+	res.WriteHeader(http.StatusCreated)
+
+	_, err = res.Write([]byte("http://localhost:8080/" + urlHash))
+	if err != nil {
+		log.Println("Error writing response:", err)
+	}
 }
 
 func main() {
+
 	mux := http.NewServeMux()
-	mux.HandleFunc("/shorten", handleShorten)
+	mux.HandleFunc("/", shortUrl)
 
 	fmt.Println("Server is running on http://localhost:8080")
 	err := http.ListenAndServe(":8080", mux)
