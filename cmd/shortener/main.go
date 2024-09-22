@@ -10,14 +10,14 @@ import (
 
 var urlHashMap = make(map[string]string)
 
-func generateHashUrl(url string) string {
+func generateHashURL(url string) string {
 	h := sha256.New()
 	h.Write([]byte(url))
 	hash := fmt.Sprintf("%x", h.Sum(nil))
 	return hash[:8]
 }
 
-func shortUrl(res http.ResponseWriter, req *http.Request) {
+func shortURL(res http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodPost {
 		http.Error(res, "Invalid request method", http.StatusBadRequest)
 		return
@@ -34,7 +34,7 @@ func shortUrl(res http.ResponseWriter, req *http.Request) {
 	responseString := string(responseData)
 
 	// Генерация хеша URL
-	urlHash := generateHashUrl(responseString)
+	urlHash := generateHashURL(responseString)
 
 	// дабавляет в hash map
 	if _, ok := urlHashMap[urlHash]; !ok {
@@ -56,7 +56,7 @@ func shortUrl(res http.ResponseWriter, req *http.Request) {
 func main() {
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", shortUrl)
+	mux.HandleFunc("/", shortURL)
 
 	fmt.Println("Server is running on http://localhost:8080")
 	err := http.ListenAndServe(":8080", mux)
