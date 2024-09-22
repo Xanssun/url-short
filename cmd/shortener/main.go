@@ -5,50 +5,79 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 )
 
 var urlHashMap = make(map[string]string)
 
-func generateHashURL(url string) string {
-	h := sha256.New()
-	h.Write([]byte(url))
-	hash := fmt.Sprintf("%x", h.Sum(nil))
-	return hash[:8]
+func isValidUrl(urlToValid string) bool {
+	_, err := url.ParseRequestURI(urlToValid)
+	return err == nil
 }
 
-func shortURL(res http.ResponseWriter, req *http.Request) {
+func isValidHash(hash string) bool {
+	_, ok := urlHashMap[hash]
+	return ok
+}
+
+func hashUrl(url string) string {
+	hash := sha256.New()
+	hash.Write([]byte(url))
+	return fmt.Sprintf("%x", hash.Sum(nil))[:8]
+}
+
+func shortUrl(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodPost {
-		http.Error(res, "Invalid request method", http.StatusBadRequest)
+		http.Error(w, "Only POST method is supported.", http.StatusBadRequest)
 		return
 	}
 
-	responseData, err := io.ReadAll(req.Body)
-	if err != nil {
-		http.Error(res, "Error reading request body", http.StatusInternalServerError)
+	body, _ := io.ReadAll(req.Body)
+
+	urlString := string(body)
+	if urlString == "" {
+		http.Error(w, "Please provide a URL.", http.StatusBadRequest)
 		return
 	}
 
-	responseString := string(responseData)
-	urlHash := generateHashURL(responseString)
-
-	if _, ok := urlHashMap[urlHash]; !ok {
-		urlHashMap[urlHash] = responseString
-		fmt.Println("New entry added:", urlHash, responseString)
-	} else {
-		fmt.Println("Entry already exists:", urlHash, urlHashMap[urlHash])
+	if !isValidUrl(urlString) {
+		http.Error(w, "Invalid URL.", http.StatusBadRequest)
+		return
 	}
 
-	// Устанавливаем заголовок Location
-	res.Header().Set("Location", "http://localhost:8080/"+urlHash)
-	res.WriteHeader(http.StatusCreated)
+	urlHash := hashUrl(urlString)
+	if _, ok := urlHashMap[urlString]; !ok {
+		urlHashMap[urlHash] = urlString
+	}
+
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusCreated)
+
+	_, _ = w.Write([]byte("http://localhost:8080/" + string(urlHash)))
+}
+
+func getShortUrl(w http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodGet {
+		http.Error(w, "Only GET method is supported.", http.StatusBadRequest)
+		return
+	}
+
+	urlHash := req.PathValue("id")
+
+	if !isValidHash(urlHash) {
+		http.Error(w, "Invalid URL.", http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain")
+	w.Header().Set("Location", urlHashMap[urlHash])
+	w.WriteHeader(http.StatusTemporaryRedirect)
 }
 
 func main() {
-
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", shortURL)
-
-	fmt.Println("Server is running on http://localhost:8080")
+	mux.HandleFunc("/", shortUrl)
+	mux.HandleFunc("/{id}/", getShortUrl)
 	err := http.ListenAndServe(":8080", mux)
 	if err != nil {
 		panic(err)

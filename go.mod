@@ -1,3 +1,3 @@
-module github.com/Xanssun/url-short.git
+module github.com/Xanssun/url-short
 
 go 1.23.1
