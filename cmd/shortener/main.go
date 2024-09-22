@@ -37,10 +37,12 @@ func shortUrl(res http.ResponseWriter, req *http.Request) {
 	urlHash := generateHashUrl(responseString)
 
 	// дабавляет в hash map
-	if _, ok := urlHashMap[responseString]; !ok {
+	if _, ok := urlHashMap[urlHash]; !ok {
 		urlHashMap[urlHash] = responseString
+		fmt.Println("New entry added:", urlHash, responseString)
+	} else {
+		fmt.Println("Entry already exists:", urlHash, urlHashMap[urlHash])
 	}
-
 	// Возвращаем сокращенный URL
 	res.Header().Set("Content-Type", "text/plain")
 	res.WriteHeader(http.StatusCreated)
