@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 )
 
@@ -23,34 +22,25 @@ func shortURL(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Чтение данных из тела запроса
 	responseData, err := io.ReadAll(req.Body)
 	if err != nil {
 		http.Error(res, "Error reading request body", http.StatusInternalServerError)
 		return
 	}
 
-	// Преобразование тела запроса в строку, потому что получаем в байтах
 	responseString := string(responseData)
-
-	// Генерация хеша URL
 	urlHash := generateHashURL(responseString)
 
-	// дабавляет в hash map
 	if _, ok := urlHashMap[urlHash]; !ok {
 		urlHashMap[urlHash] = responseString
 		fmt.Println("New entry added:", urlHash, responseString)
 	} else {
 		fmt.Println("Entry already exists:", urlHash, urlHashMap[urlHash])
 	}
-	// Возвращаем сокращенный URL
-	res.Header().Set("Content-Type", "text/plain")
-	res.WriteHeader(http.StatusCreated)
 
-	_, err = res.Write([]byte("http://localhost:8080/" + urlHash))
-	if err != nil {
-		log.Println("Error writing response:", err)
-	}
+	// Устанавливаем заголовок Location
+	res.Header().Set("Location", "http://localhost:8080/"+urlHash)
+	res.WriteHeader(http.StatusCreated)
 }
 
 func main() {
