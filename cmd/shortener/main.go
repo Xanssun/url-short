@@ -8,6 +8,8 @@ import (
 	"net/http"
 )
 
+var urlHashMap = make(map[string]string)
+
 func generateHashUrl(url string) string {
 	h := sha256.New()
 	h.Write([]byte(url))
@@ -33,6 +35,11 @@ func shortUrl(res http.ResponseWriter, req *http.Request) {
 
 	// Генерация хеша URL
 	urlHash := generateHashUrl(responseString)
+
+	// дабавляет в hash map
+	if _, ok := urlHashMap[responseString]; !ok {
+		urlHashMap[urlHash] = responseString
+	}
 
 	// Возвращаем сокращенный URL
 	res.Header().Set("Content-Type", "text/plain")
