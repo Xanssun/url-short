@@ -1,81 +1,66 @@
 package main
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"io"
-	"math/rand"
+	"log"
 	"net/http"
-	"strings"
 )
 
-const (
-	addr     = "localhost:8080"
-	idLength = 8
-	charset  = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-)
+var urlHashMap = make(map[string]string)
 
-var (
-	urlMap = make(map[string]string)
-)
-
-func generateShortID() string {
-	b := make([]byte, idLength)
-	for i := range b {
-		b[i] = charset[rand.Intn(len(charset))]
-	}
-	return string(b)
+func generateHashURL(url string) string {
+	h := sha256.New()
+	h.Write([]byte(url))
+	hash := fmt.Sprintf("%x", h.Sum(nil))
+	return hash[:8]
 }
 
-func shortenURLHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Invalid request method", http.StatusBadRequest)
+func shortURL(res http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodPost {
+		http.Error(res, "Invalid request method", http.StatusBadRequest)
 		return
 	}
 
-	body, err := io.ReadAll(r.Body)
-	if err != nil || len(body) == 0 {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-	originalURL := string(body)
-
-	var shortID string
-	for {
-		shortID = generateShortID()
-		if _, exists := urlMap[shortID]; !exists {
-			urlMap[shortID] = originalURL
-			break
-		}
-	}
-
-	shortURL := "http://localhost:8080/" + shortID
-	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte(shortURL))
-}
-
-func redirectHandler(w http.ResponseWriter, r *http.Request) {
-	shortID := strings.TrimPrefix(r.URL.Path, "/")
-	fmt.Println(shortID)
-	if len(shortID) == 0 {
-		http.Error(w, "Invalid request", http.StatusBadRequest)
+	// Чтение данных из тела запроса
+	responseData, err := io.ReadAll(req.Body)
+	if err != nil {
+		http.Error(res, "Error reading request body", http.StatusInternalServerError)
 		return
 	}
 
-	originalURL, exists := urlMap[shortID]
+	// Преобразование тела запроса в строку, потому что получаем в байтах
+	responseString := string(responseData)
 
-	if !exists {
-		http.Error(w, "Invalid request", http.StatusBadRequest)
-		return
+	// Генерация хеша URL
+	urlHash := generateHashURL(responseString)
+
+	// дабавляет в hash map
+	if _, ok := urlHashMap[urlHash]; !ok {
+		urlHashMap[urlHash] = responseString
+		fmt.Println("New entry added:", urlHash, responseString)
+	} else {
+		fmt.Println("Entry already exists:", urlHash, urlHashMap[urlHash])
 	}
-	fmt.Println(originalURL)
-	http.Redirect(w, r, originalURL, http.StatusTemporaryRedirect)
+	// Возвращаем сокращенный URL
+	res.Header().Set("Content-Type", "text/plain")
+	res.WriteHeader(http.StatusCreated)
+
+	_, err = res.Write([]byte("http://localhost:8080/" + urlHash))
+	if err != nil {
+		log.Println("Error writing response:", err)
+	}
 }
 
 func main() {
+
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", shortenURLHandler)
-	mux.HandleFunc("/{id}", redirectHandler)
-	if err := http.ListenAndServe(addr, mux); err != nil {
+	mux.HandleFunc("/", shortURL)
+
+	fmt.Println("Server is running on http://localhost:8080")
+	err := http.ListenAndServe(":8080", mux)
+	if err != nil {
 		panic(err)
 	}
 }
